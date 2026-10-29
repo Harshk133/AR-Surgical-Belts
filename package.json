@@ -1,0 +1,24 @@
+{
+  "name": "taylors-brace-tryon",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "setup:assets": "node scripts/fetch-assets.mjs",
+    "postinstall": "node scripts/fetch-assets.mjs --wasm-only",
+    "model:build": "node scripts/build-model.mjs"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.5"
+  }
+}
