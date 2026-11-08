@@ -59,6 +59,11 @@ button { cursor: pointer; }
   border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--surface-2);
 }
 
+.product-switch { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.product-switch button { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.product-switch button[aria-pressed='true'] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); font-weight: 600; }
+.select { width: 100%; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); padding: 0 8px; font-size: 13px; }
+
 .main {
   flex: 1;
   display: grid;
@@ -272,7 +277,8 @@ dialog::backdrop { background: rgba(15, 20, 25, 0.55); }
   .header .badge { display: none; }
 }
 @media (max-width: 520px) {
-  .header .brand { display: none; }
+  .header .brand, .header h1 { display: none; }
+  .product-switch button { padding: 0 8px; font-size: 12px; }
   .tool { min-width: 48px; padding: 0 4px; font-size: 10px; }
   .tool.capture { min-width: 58px; }
   .toolbar { bottom: max(10px, env(safe-area-inset-bottom)); }

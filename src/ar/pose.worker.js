@@ -83,7 +83,7 @@ async function create(variant, wantDelegate) {
 function copyMask(m) {
   const sw = m.width;
   const sh = m.height;
-  const step = Math.max(1, Math.ceil(sw / MASK_MAX_W));
+  const step = Math.max(1, Math.ceil(sw / (cfg.maskMaxW || MASK_MAX_W)));
   const w = Math.floor(sw / step);
   const h = Math.floor(sh / step);
   const src = m.getAsFloat32Array();
@@ -158,7 +158,7 @@ self.onmessage = (e) => {
   queue = queue.then(async () => {
     try {
       if (msg.type === 'init') {
-        cfg = { base: msg.base, segmentation: msg.segmentation, autoDowngrade: msg.autoDowngrade !== false };
+        cfg = { base: msg.base, segmentation: msg.segmentation, autoDowngrade: msg.autoDowngrade !== false, maskMaxW: msg.maskMaxW };
         // absolute URL: keeps Vite's dev server from rewriting the loader's dynamic import()
         fileset = await FilesetResolver.forVisionTasks(new URL(`${msg.base}mediapipe/wasm`, self.location.origin).href, true);
         await create(msg.variant);

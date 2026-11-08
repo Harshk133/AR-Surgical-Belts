@@ -1,36 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
-import { PRODUCT } from '../model/braceConfig.js';
-import { TorsoBack, TorsoFront, TorsoSide } from './icons.jsx';
+import { ArmFront, ArmInner, ArmOuter, HandBack, HandPalm, HandThumb, TorsoBack, TorsoFront, TorsoSide } from './icons.jsx';
 
-export function ProductInformation() {
+const VIEW_ICONS = { front: TorsoFront, side: TorsoSide, back: TorsoBack };
+const HAND_ICONS = { back: HandBack, palm: HandPalm, side: HandThumb };
+const ARM_ICONS = { outer: ArmOuter, inner: ArmInner, front: ArmFront };
+const ICONS = { torso: VIEW_ICONS, wrist: HAND_ICONS, elbow: ARM_ICONS, immobilizer: VIEW_ICONS, sling: VIEW_ICONS, lumbar: VIEW_ICONS, clavicle: VIEW_ICONS };
+
+export function ProductInformation({ product }) {
   return (
     <section className="section" aria-labelledby="prod-title">
-      <h2 className="product-title" id="prod-title">{PRODUCT.name}</h2>
-      <p className="product-sub">{PRODUCT.brand} · {PRODUCT.tagline}</p>
-      <p className="product-desc">{PRODUCT.description}</p>
-      <ul className="features">{PRODUCT.features.map((f) => <li key={f}>{f}</li>)}</ul>
+      <h2 className="product-title" id="prod-title">{product.name}</h2>
+      <p className="product-sub">{product.brand} · {product.tagline}</p>
+      <p className="product-desc">{product.description}</p>
+      <ul className="features">{product.features.map((f) => <li key={f}>{f}</li>)}</ul>
       <div className="swatches" aria-label="Colours">
-        {['#6e7b86', '#47525e', '#2b3549', '#3a8580'].map((c) => <span key={c} className="swatch" style={{ background: c }} />)}
+        {product.swatches.map((c) => <span key={c} className="swatch" style={{ background: c }} />)}
       </div>
-      <p className="note">{PRODUCT.disclaimer}</p>
+      <p className="note">{product.disclaimer}</p>
     </section>
   );
 }
 
-const VIEWS = [
-  { id: 'front', label: 'Front', Icon: TorsoFront, text: 'Face the camera to see the shoulder straps and the front belt closure.' },
-  { id: 'side', label: 'Side', Icon: TorsoSide, text: 'Turn slowly to your left or right to see the strap routing under the arm and the brace thickness.' },
-  { id: 'back', label: 'Back', Icon: TorsoBack, text: 'Turn around to preview the rear panel and diagonal straps. Back-view tracking is estimated and less stable: turn slowly, and use the 3D viewer below for a precise look.' },
-];
-
-export function ViewGuidance({ snap }) {
-  const [target, setTarget] = useState('front');
+export function ViewGuidance({ snap, product }) {
+  const icons = ICONS[product.kind];
+  const VIEWS = product.views.map((v) => ({ ...v, Icon: icons[v.id] }));
+  const [target, setTarget] = useState(VIEWS[0].id);
   const live = snap.phase === 'tracking';
   const facing = snap.tracking.valid ? snap.tracking.facing : null;
-  const current = VIEWS.find((v) => v.id === target);
+  const current = VIEWS.find((v) => v.id === target) || VIEWS[0];
+  const label = facing ? product.facingLabels[facing] || facing : '';
   return (
     <section className="section" aria-labelledby="views-h">
-      <h3 id="views-h">Viewing guide <span className="muted">{live && facing ? `Detected: ${facing} (est.)` : ''}</span></h3>
+      <h3 id="views-h">Viewing guide <span className="muted">{live && facing ? `Detected: ${label.toLowerCase()} (est.)` : ''}</span></h3>
       <div className="views">
         {VIEWS.map(({ id, label, Icon }) => (
           <button key={id} className="view-btn" aria-pressed={target === id} onClick={() => setTarget(id)}>
@@ -58,8 +59,13 @@ function Slider({ label, min, max, step, value, onChange, format }) {
 
 const cm = (v) => `${Math.round(v * 100)} cm`;
 const deg = (v) => `${Math.round(v)}°`;
+const FORMAT = {
+  cm: (v) => (Math.abs(v) < 0.1 ? `${(v * 100).toFixed(1)} cm` : cm(v)),
+  deg,
+  '%': (v) => `${Math.round(v * 100)}%`,
+};
 
-export function AlignmentControls({ session, snap }) {
+export function AlignmentControls({ session, snap, product }) {
   const a = snap.adjust;
   // Sliders are in screen terms; in a mirrored view screen-right is the wearer's right (-X).
   const sx = snap.mirrored ? -1 : 1;
@@ -68,14 +74,14 @@ export function AlignmentControls({ session, snap }) {
     <section className="section" aria-labelledby="align-h">
       <h3 id="align-h">Adjust alignment <span className="muted">{disabled ? 'available while tracking' : 'this session only'}</span></h3>
       <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, opacity: disabled ? 0.55 : 1 }}>
-        <Slider label="Up / down" min={-0.15} max={0.15} step={0.005} value={a.y} format={cm} onChange={(y) => session.setAdjust({ y })} />
-        <Slider label="Left / right" min={-0.12} max={0.12} step={0.005} value={a.x * sx} format={cm} onChange={(v) => session.setAdjust({ x: v * sx })} />
-        <Slider label="Size" min={0.8} max={1.25} step={0.01} value={a.scale} format={(v) => `${Math.round(v * 100)}%`} onChange={(scale) => session.setAdjust({ scale })} />
-        <Slider label="Tilt" min={-20} max={20} step={1} value={a.rollDeg * sx} format={deg} onChange={(v) => session.setAdjust({ rollDeg: v * sx })} />
-        <Slider label="Turn" min={-30} max={30} step={1} value={a.yawDeg * sx} format={deg} onChange={(v) => session.setAdjust({ yawDeg: v * sx })} />
-        <Slider label="Depth" min={-0.06} max={0.06} step={0.005} value={a.z} format={cm} onChange={(z) => session.setAdjust({ z })} />
+        {product.sliders.map(({ key, label, min, max, step, unit, screen }) => {
+          const k = screen ? sx : 1;
+          return (
+            <Slider key={key} label={label} min={min} max={max} step={step} value={a[key] * k} format={FORMAT[unit]} onChange={(v) => session.setAdjust({ [key]: v * k })} />
+          );
+        })}
       </fieldset>
-      {snap.options.fitShape && snap.fit && snap.phase === 'tracking' && <FitStatus fit={snap.fit} />}
+      {snap.options.fitShape && snap.fit && snap.phase === 'tracking' && <FitStatus fit={snap.fit} labels={product.fitLabels} />}
       <div className="row end" style={{ marginTop: 8 }}>
         <button className="btn small" onClick={() => session.resetAlignment({ recalibrate: false })}>Clear adjustments</button>
         <button className="btn small" onClick={() => session.resetAlignment()} disabled={snap.phase !== 'tracking'}>Re-align</button>
@@ -84,8 +90,9 @@ export function AlignmentControls({ session, snap }) {
   );
 }
 
-export function Settings({ session, snap }) {
+export function Settings({ session, snap, product }) {
   const o = snap.options;
+  const L = product.settingsLabels;
   return (
     <details className="section">
       <summary>Display &amp; tracking settings</summary>
@@ -95,12 +102,23 @@ export function Settings({ session, snap }) {
       </label>
       <label className="check">
         <input type="checkbox" checked={o.fitShape} onChange={(e) => session.setOption('fitShape', e.target.checked)} />
-        Shape the brace to my body <small>(outline fitting)</small>
+        {L.fitShape} <small>(outline fitting)</small>
       </label>
       <label className="check">
         <input type="checkbox" checked={o.armOcclusion} onChange={(e) => session.setOption('armOcclusion', e.target.checked)} />
-        Arms pass in front of the brace <small>(estimated)</small>
+        {L.occlusion} <small>(estimated)</small>
       </label>
+      {!['torso', 'lumbar', 'clavicle'].includes(product.kind) && (
+        <div className="slider">
+          <label htmlFor="hand-pref">{product.kind === 'wrist' ? 'Brace on' : product.kind === 'elbow' ? 'Strap on' : 'Arm in pouch'}</label>
+          <select id="hand-pref" className="select" value={o.hand || 'auto'} onChange={(e) => session.setOption('hand', e.target.value)}>
+            <option value="auto">{product.kind === 'wrist' ? 'Nearest hand' : product.kind === 'elbow' ? 'Clearest arm' : 'The bent arm'}</option>
+            <option value="left">{product.kind === 'wrist' ? 'Left hand' : 'Left arm'}</option>
+            <option value="right">{product.kind === 'wrist' ? 'Right hand' : 'Right arm'}</option>
+          </select>
+          <span />
+        </div>
+      )}
       <label className="check">
         <input type="checkbox" checked={snap.mirrored} onChange={(e) => session.setOption('mirror', e.target.checked)} />
         Mirror view
@@ -115,15 +133,8 @@ export function Settings({ session, snap }) {
   );
 }
 
-const INSPECT_VIEWS = [
-  ['front', 'Front'],
-  ['left', 'Left'],
-  ['back', 'Back'],
-  ['right', 'Right'],
-  ['threeQuarter', '¾'],
-];
-
-export function ProductInspector() {
+export function ProductInspector({ product }) {
+  const INSPECT_VIEWS = product.inspectorViews;
   const ref = useRef(null);
   const viewer = useRef(null);
   const [state, setState] = useState('idle');
@@ -137,9 +148,9 @@ export function ProductInspector() {
       io.disconnect();
       setState('loading');
       try {
-        const { ProductViewer } = await import('../ar/ProductViewer.js');
+        const { ProductViewer, WRIST_VIEWER, ELBOW_VIEWER, IMMOBILIZER_VIEWER, SLING_VIEWER, LUMBAR_VIEWER, CLAVICLE_VIEWER } = await import('../ar/ProductViewer.js');
         if (disposed) return;
-        viewer.current = new ProductViewer(el);
+        viewer.current = new ProductViewer(el, { wrist: WRIST_VIEWER, elbow: ELBOW_VIEWER, immobilizer: IMMOBILIZER_VIEWER, sling: SLING_VIEWER, lumbar: LUMBAR_VIEWER, clavicle: CLAVICLE_VIEWER }[product.kind]);
         await viewer.current.load();
         if (!disposed) setState('ready');
       } catch (err) {
@@ -165,7 +176,7 @@ export function ProductInspector() {
     <section className="section" aria-labelledby="insp-h">
       <h3 id="insp-h">Inspect the brace in 3D <span className="muted">drag to rotate</span></h3>
       <div className="inspector">
-        <canvas ref={ref} aria-label="3D model of the Taylor's Brace" />
+        <canvas ref={ref} aria-label={`3D model of the ${product.name}`} />
         {state !== 'ready' && <div className="loading">{state === 'error' ? '3D viewer unavailable' : 'Loading 3D model…'}</div>}
       </div>
       <div className="seg" role="group" aria-label="Model view">
@@ -177,7 +188,7 @@ export function ProductInspector() {
   );
 }
 
-function FitStatus({ fit }) {
+function FitStatus({ fit, labels }) {
   const item = (label, v, todo) => (
     <li className={v > 0.5 ? 'done' : ''}>
       <span className="tick" aria-hidden="true">{v > 0.5 ? '✓' : '○'}</span>
@@ -186,8 +197,8 @@ function FitStatus({ fit }) {
   );
   return (
     <ul className="fit-status" aria-label="Body fit">
-      {item('Width shaped to your outline', fit.width, 'Face the camera to fit the width')}
-      {item('Waist and tummy depth fitted', fit.depth, 'Turn sideways once to fit the depth')}
+      {item(labels.width[0], fit.width, labels.width[1])}
+      {item(labels.depth[0], fit.depth, labels.depth[1])}
     </ul>
   );
 }

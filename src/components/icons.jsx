@@ -32,3 +32,25 @@ export const TorsoSide = () => (
 export const TorsoBack = () => (
   <svg {...base}><circle cx="12" cy="4.5" r="2" fill="currentColor" /><path d="M7 8.5h10l-1 10H8z" /><path d="M10.5 9v9M13.5 9v9" /></svg>
 );
+
+// Hand glyphs for the wrist brace views
+export const HandBack = () => (
+  <svg {...base}><path d="M8 21v-5l-2.5-3.5a1.4 1.4 0 0 1 2.2-1.7L9 12V5a1.2 1.2 0 0 1 2.4 0v5.5V3.8a1.2 1.2 0 0 1 2.4 0v6.7V5a1.2 1.2 0 0 1 2.4 0v6V7.2a1.2 1.2 0 0 1 2.4 0V15c0 3-1.5 4-2.6 6" /><path d="M8.5 17.5h8" /></svg>
+);
+export const HandPalm = () => (
+  <svg {...base}><path d="M8 21v-5l-2.5-3.5a1.4 1.4 0 0 1 2.2-1.7L9 12V5a1.2 1.2 0 0 1 2.4 0v5.5V3.8a1.2 1.2 0 0 1 2.4 0v6.7V5a1.2 1.2 0 0 1 2.4 0v6V7.2a1.2 1.2 0 0 1 2.4 0V15c0 3-1.5 4-2.6 6" /><path d="M11 14.5c1 .8 2.6.8 3.6 0" /></svg>
+);
+export const HandThumb = () => (
+  <svg {...base}><path d="M10 21v-4.5c-1.5-.8-3-2.6-3-5.5V9.5a1.3 1.3 0 0 1 2.6 0V11l1-6.2a1.3 1.3 0 0 1 2.6.3V11h3.3a1.6 1.6 0 0 1 1.5 2.1l-1.2 4.2c-.3 1-1 1.7-1.8 2V21" /><path d="M9.5 17.5h6" /></svg>
+);
+
+// Forearm glyphs for the elbow strap views (elbow at the top, strap band below it)
+export const ArmOuter = () => (
+  <svg {...base}><path d="M9 3c-1 2-1.5 4-1 6l1 12h5l1-11c.3-2.5-.3-5-1.5-7" /><path d="M7.8 11.5h7" /><path d="M8 14h6.8" /><rect x="11.5" y="11.6" width="2.6" height="2.3" rx="1" fill="currentColor" /></svg>
+);
+export const ArmInner = () => (
+  <svg {...base}><path d="M9 3c-1 2-1.5 4-1 6l1 12h5l1-11c.3-2.5-.3-5-1.5-7" /><path d="M7.8 11.5h7" /><path d="M8 14h6.8" /><rect x="8.6" y="10.6" width="2.4" height="4.2" rx="0.6" /></svg>
+);
+export const ArmFront = () => (
+  <svg {...base}><path d="M9 3c-1 2-1.5 4-1 6l1 12h5l1-11c.3-2.5-.3-5-1.5-7" /><path d="M7.8 11.5h7" /><path d="M8 14h6.8" /><path d="M10.5 12.7h2" /></svg>
+);

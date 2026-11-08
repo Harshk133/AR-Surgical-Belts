@@ -20,9 +20,9 @@ function Dialog({ open, onClose, title, children, footer }) {
   );
 }
 
-export function CaptureDialog({ shot, error, onClose }) {
+export function CaptureDialog({ shot, error, onClose, product }) {
   const open = !!(shot || error);
-  const name = `taylors-brace-preview-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+  const name = `${product.captureName}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
   return (
     <Dialog
       open={open}
@@ -48,30 +48,15 @@ export function CaptureDialog({ shot, error, onClose }) {
   );
 }
 
-export function HelpDialog({ open, onClose }) {
+export function HelpDialog({ open, onClose, product }) {
   return (
     <Dialog open={open} onClose={onClose} title="Positioning guide">
-      <h4>Getting a good alignment</h4>
-      <ul>
-        <li>Stand 1.5–2 m from the camera so your head, shoulders and waist are visible.</li>
-        <li>Face the camera with arms relaxed slightly away from your sides while it aligns.</li>
-        <li>Use even, front-facing light; avoid a bright window behind you.</li>
-        <li>Fitted, plain clothing tracks better than loose or patterned clothes.</li>
-        <li>If the brace sits a little off, use <em>Adjust alignment</em> in the side panel, or press <em>Reset</em> to re-align.</li>
-      </ul>
-      <h4>Seeing the sides and back</h4>
-      <ul>
-        <li>Turn slowly. The brace follows your torso's estimated rotation.</li>
-        <li>When your face is hidden, the app infers that you are facing away. This is an estimate and can lag or flicker; turning slowly helps.</li>
-        <li>For an exact look at the rear panel and straps, use the 3D viewer in the side panel.</li>
-      </ul>
-      <h4>What this preview can and can't do</h4>
-      <ul>
-        <li>Position, size and depth are estimated from a single camera image; there is no true depth sensor.</li>
-        <li>Arms and the body hide parts of the brace using approximations, so small clipping or floating edges can occur.</li>
-        <li>It does not measure you, choose a size, or check clinical fit. A clinician or orthotist should fit the brace.</li>
-        <li>Video is processed in your browser and is never uploaded.</li>
-      </ul>
+      {product.help.map((sec) => (
+        <div key={sec.title}>
+          <h4>{sec.title}</h4>
+          <ul>{sec.items.map((t) => <li key={t}>{t}</li>)}</ul>
+        </div>
+      ))}
     </Dialog>
   );
 }

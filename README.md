@@ -226,6 +226,205 @@ in front of the chest when it is beside it, for example).
 
 ---
 
+## Thumb Wrist Brace (DaynoR)
+
+Pick it with the switch in the header, or open `/?product=thumbWrist`. Reference photos are in
+`public/thumb_wrist_brace/`. Fitting guides for this kind of brace put the distal edge just below the palm
+crease (fingers free), the thumb through its own sleeve, and the straps closing around the wrist.
+
+**There is no GLB.** The brace is generated procedurally on the wearer's own hand every tracking frame
+(`src/ar/WristBrace.js`). Its pieces are the neoprene sleeve, the thumb sleeve, the stitched edge bindings,
+the raised wrist strap with its rounded velcro tab, and the label. All the dimensions in
+`src/model/wristBraceConfig.js` are ratios of the knuckle span `|MCP5-MCP17|` and the palm length
+`|wrist-MCP9|`, so it scales to any hand.
+
+| Step | File | What it does |
+| --- | --- | --- |
+| Inference | `hand.worker.js`, `HandTracker.js` | MediaPipe Hand Landmarker (2 hands, 21 joints each, metric world landmarks) + selfie segmenter for the person mask, in a worker |
+| Placement | `HandTransform.js` | Same weighted perspective solve as the torso, then **depth-ray snapping**: each joint keeps its solved depth but moves onto the camera ray through its 2D landmark, so the brace sits on the hand to the pixel. Hand frame: wrist origin, +Y distal, +X radial, +Z dorsal; right hands use a mirrored basis |
+| Handedness | `HandTransform.js` | The label sets the chirality. Finger curl (fingers always flex toward the palm) cross-checks it continuously. Measured: tasks-vision 1.2 labels the true hand on un-mirrored frames |
+| Shape | `WristBrace.js` | One cross-section table drives every part. Palm sections come from the knuckle landmarks, forearm sections from the fitter. The thumb sleeve is swept along the tracked CMC → MCP → IP joints, so it follows the real thumb |
+| Fit | `WristFitter.js` | At 4 levels up the forearm, the mask is scanned across the projected limb axis. The ellipse model `e² = a²(R·w)² + b²(D·w)²` is linear in (a², b²), so the back-of-hand views fit the width and one turn to the thumb side fits the thickness (recursive least squares + anatomical prior). The scan centres also give the wrist-centre offset and the **forearm direction**, so the sleeve bends with wrist flexion/deviation (max 50°) |
+| Occlusion | `WristBrace.js` | Depth-only skin: forearm + palm, thumb and finger capsules for this hand and the other hand, so fingers curled over the palm or the other hand pass in front |
+
+Robustness: the mask is used only while it agrees with the hand landmarks. An arm held in front of the body
+merges with the torso in the mask; then the brace falls back to anatomical proportions and silhouette trimming
+switches off. Measurements outside 0.72–1.4× the prior are rejected.
+
+QA: `/?product=thumbWrist&source=/thumb_wrist_brace/WhatsApp%20Image%202026-11-07%20at%208.03.59%20PM%20(2).jpeg`
+runs the pipeline on the product photo (a left hand, palm side). Result: left hand, palm view, and the thumb sleeve
+on the thumb from CMC to past the MCP joint.
+
+---
+
+## Tennis Elbow Support (DaynoR)
+
+Pick it in the header or open `/?product=tennisElbow`. Reference photos are in `public/tennis_elbow_support/`.
+The box instructions say "wear 50 m.m. below Elbow"; the strap end passes through a plastic buckle, is pulled back
+and locked on the velcro. The real product is a beige padded band with a raised pressure-pad pocket and a white
+DaynoR label.
+
+The strap is procedural (`src/ar/ElbowStrap.js`): padded band, stitched bindings, pressure pad, label, buckle and
+folded-back tail. Its dimensions are ratios of the wearer's forearm length `Lf = |elbow-wrist|`
+(`src/model/elbowSupportConfig.js`): centre 0.2·Lf below the elbow (≈5 cm), width 0.21·Lf (≈5.5 cm).
+
+| Step | File | What it does |
+| --- | --- | --- |
+| Inference | `PoseTracker` / `pose.worker.js` | The existing body tracker, with a finer person mask (480 px instead of 320) because the forearm is narrow in the frame |
+| Placement | `ArmTransform.js` | Same perspective solve as the torso, then depth-ray snapping of shoulder/elbow/wrist/hand points onto their 2D landmarks |
+| Orientation | `ArmTransform.js` | **Lateral side from the elbow hinge**: `side · unit(upperArm × forearm)`. It is correct however the shoulder is rotated, so the pad sits over the extensor muscles. A nearly straight arm (< 25°) falls back to "away from the body" |
+| Fit | `ElbowFitter.js` | Ellipse silhouette least squares at 3 strap levels, with the shape prior coupled both ways: the unseen axis follows the measured one. The measured silhouette centre corrects the elbow landmark's sideways error |
+| Occlusion | `ElbowRenderer.js` | Depth-only forearm from the strap's own sections, plus mask-trimmed capsules for this upper arm and hand and for the other arm |
+
+**Synthetic ground-truth test** (exact cylinder silhouettes in a matching mask, true forearm radius known, true axis
+1 cm off the landmark):
+
+| Case | Forearm length | Fitted radius (observed axis) | Axis offset recovered | Strap centre error |
+| --- | --- | --- | --- | --- |
+| Forearm out to the side, against background | 0.253 m (exact) | 4.48–4.90 cm vs 4.5 | 1.2 cm vs 1.0 | 1.9 px at 1280 px |
+| Forearm raised beside the upper arm (one edge hidden) | exact | 4.88–5.06 cm vs 5.2 | n/a | 0 px |
+
+The lateral direction was checked by hand against anatomy (forearm abducted with the humerus externally rotated:
+the lateral side faces away from the camera, reported as "inner side"). The box photos crop the arms, so the body
+tracker can't place an elbow on them; the app says so ("Show your elbow and forearm…").
+
+---
+
+## Universal Shoulder Immobilizer (DaynoR)
+
+Pick it in the header or open `/?product=shoulderImmobilizer`. Reference photos are in `public/universal_shoulder_imoblizer/`:
+the box front (how it is worn), the real product (grey fabric, green piping) and a box back from a related DaynoR product.
+Its fitting notes (band around the lower chest, elbow at 90°, flip it for the other shoulder) match the
+manufacturer and hospital guides consulted: body band around the torso, arm held against the body, forearm in a pouch,
+strap over the shoulder.
+
+It is a torso product, so it runs the **Taylor's brace pipeline unchanged** (TorsoTransform placement and
+front/back, BodyShapeFitter body shape, calibration, latency compensation) through two hooks in `TryOnSession`
+(`createRenderer`, `onPoseResult`), and adds the supported arm. Geometry (`src/ar/ImmobilizerModel.js`) is procedural
+in the same reference-torso space as the Taylor GLB, so the measured body-shape factors apply directly:
+
+- **Body band = convex hull.** A band pulled around a body takes the convex hull of what it wraps. Each band row is
+  the hull of the fitted torso section (reference superellipses × measured factors) and, when the upper arm lies
+  against the side, the arm's horizontal cross-section (cylinder ∩ plane = ellipse), offset by the band thickness.
+  The band's height follows the real elbow (bottom 3.5 cm above it, clamped), as on the box photo.
+- **Pouch** around the tracked forearm (closed and rounded behind the elbow, open at the wrist, green piping).
+- **X straps** run from the band to the pouch, draped over whichever surface is in front (band hull, torso, pouch),
+  and smoothed like a strap under tension.
+- **Shoulder straps** follow the torso's side-view contour over each shoulder, with slider buckles.
+- **Arm joints** are depth-ray snapped onto their 2D landmarks (keeping the torso solve's depth) before going into
+  torso space. The occluders (other arm and hand, the supported hand, neck and head) use the same snapped joints.
+
+Edge cases handled (`ImmobilizerTryOnSession.js`): which arm is supported (user choice, else the arm in the
+sling pose, switching when the other arm goes into the sling); arm hanging, raised or not bent (the pouch hides,
+with a specific hint); upper arm away from the body (the band wraps only the chest); arm briefly lost (held
+0.5 s); the other hand in front of the pouch (occluded); back view (the pouch is hidden by the body). The sling-pose
+check uses hysteresis (enter 60–130° flexion, stay 45–150°), so the pouch doesn't flicker.
+The immobilizer is **not** trimmed to the body outline (it legitimately bridges gaps between arm and chest and behind
+the elbow); the mask still drives the body-shape fit and trims the occluders.
+
+**Synthetic end-to-end test** (drawn person + matching landmarks and mask through the real session loop):
+left arm in the sling → left arm detected, 86° flexion, band wraps chest and upper arm, pouch and X straps on the
+forearm; arm hanging → pouch hidden and "Bend your left elbow to about 90°…"; arm held out → band wraps only the chest
+and "Bring your left upper arm against your side…"; right arm in the sling → auto-switch to the right, geometry
+mirrored.
+
+---
+
+## Arm Sling Pouch (DaynoR)
+
+Pick it in the header or open `/?product=armSling`. Reference photos are in `public/arm_sling_pouch/` (box front and back).
+The real product is the grey pouch with green piping photographed in the immobilizer folder, next to its "ARM SLING
+POUCH" pack. Fitting guides consulted ([3M Futuro](https://www.3m.com/3M/en_US/p/d/b00003224/),
+[NHS SFH](https://www.sfh-tr.nhs.uk/media/5kcfcopq/pil202510-04-fps-how-to-fit-a-poly-sling.pdf),
+[shoulderdoc](https://shoulderdoc.co.uk/pages/standard-sling-application)): elbow snug in the closed corner, forearm
+about level, one strap from the elbow end across the back, over the **opposite** shoulder (on the shoulder, not the neck,
+with a pad) and down to a buckle at the front.
+
+It shares the immobilizer's pipeline (`ImmobilizerTryOnSession` is configurable: model, pose thresholds, band-wrap
+requirement, hints). `src/ar/SlingModel.js`:
+
+- **Pouch:** an open-topped, flat-bottomed U trough on the tracked forearm, with a closed elbow-end panel. Its walls are
+  higher at the elbow than at the hand (the box's trapezoid), and it ends 60 % of the way to the knuckles (from the pose
+  hand points, snapped at the wrist's depth), so the fingers come out. One piping loop runs along both top edges and
+  round the hand opening.
+- **Strap:** over the opposite shoulder, found by marching rays from inside the shoulder to the fitted torso surface
+  in the side plane at the strap's x (it sits on the shoulder, not the neck). The chest and back runs are pushed onto
+  the fitted torso surface, then smoothed (tension) and resampled. A comfort pad widens it over the shoulder, and a
+  buckle sits on the chest run.
+- **Occlusion:** the open pouch shows the arm inside it, so the forearm and upper arm are depth-only occluders (snapped
+  joints), as are the other arm, the hand, neck and head, and the fitted torso.
+
+Edge cases: arm hanging, raised or not level → the sling hides with a specific hint ("Lower your left hand so the
+forearm is about level"…). Hysteresis is tight on exit (flexion ≤ 135°, incline ≤ ~46°), so a sweep through the level
+pose doesn't latch. The sling stays drawn 0.6 s after leaving the pose so it doesn't blink. Arm state resets on every
+start; either arm is detected automatically.
+
+**Synthetic end-to-end test:** level left forearm → in the sling (95°), pouch and strap over the right shoulder; arm
+hanging → hidden, "Bend your left elbow…"; forearm raised steeply → hidden, "Lower your left hand…"; right arm in the
+sling → auto-switch, strap over the left shoulder. The immobilizer was re-run after the refactor (unchanged result).
+
+---
+
+## Lumbar & Sacral Support (DaynoR)
+
+Pick it in the header or open `/?product=lumbarSacral`. Reference photos are in `public/lumber_sacral_support/`: box front and
+back (rear panel with spring-steel stays, double-pull side straps) and the real product (dark charcoal striped elastic,
+horizontal velcro strip, white label). The real product's colours are used. Fitting guides
+([Guy's & St Thomas' NHS](https://guysandstthomas.nhs.uk/health-information/lumbar-sacral-corset),
+[Drugs.com LSO](https://www.drugs.com/cg/lumbosacral-orthosis-ambulatory-care.html)): centred on the lower back,
+bottom edge at the top of the buttocks so it covers the sacrum, velcro at the front, side straps pulled snug, and it
+must not dig into the ribs or groin.
+
+A pure torso product: `LumbarSession.js` is the **Taylor's brace session unchanged** (placement, front/back,
+BodyShapeFitter, calibration, arm occlusion, silhouette trim), with the GLB replaced by `LumbarModel.js`. The
+model is rebuilt on the measured body shape each pose result, and "Size" acts as girth:
+
+- The belt is the fitted torso surface + elastic thickness. Its edges are placed by reference anatomy (hips =
+  hip joints at −0.50; waist −0.33…−0.40; sacrum ≈ −0.42…−0.56; pubic bone ≈ −0.50 at the front). Back
+  −0.29 → −0.575 (over the whole sacrum), front −0.335 → −0.515 (below the ribs, above the groin), blended smoothly
+  around the body.
+- A contoured rear panel (padded rounded rectangle) with four spring-steel stays as raised ridges in stitched
+  channels; double-pull side straps (upper and lower on each side, converging toward the front, rounded pull tabs,
+  teal stitching from the box art); the front velcro closure flap with the loop strip, centre seam and label; stitched
+  edge bindings.
+
+**Synthetic end-to-end test:** a drawn standing person through the real loop → tracking; width factors measured
+from the mask ≈ 1.02–1.05 (the belt edges sit on the drawn outline); the hip joints fall just inside the front lower
+edge. With the hips out of frame → "Step back so your hips are in view…".
+
+---
+
+## Meek Clavicle Brace (DaynoR)
+
+Pick it in the header or open `/?product=clavicleBrace`. Reference photos are in `public/clavicle_belt/`: box front and back (worn,
+seen from behind) and the real product (grey padded straps with green piping). It is a figure-of-8 brace: each wide
+padded strap goes over the **front of the shoulder, under the armpit**, and the two loops meet on a padded back plate
+between the shoulder blades, pulling the shoulders back
+([BraceAbility](https://www.braceability.com/products/figure-8-clavicle-brace),
+[Breg instructions](https://physiostore.ca/wp-content/uploads/pdf/Breg-Clavicle-Support-Instructions-The-Physio-Store.pdf)).
+
+A pure torso product: `ClavicleTryOnSession` (in `LumbarSession.js`, which now holds the shared
+`ProceduralTorsoSession`) runs the Taylor's brace session unchanged. `ClavicleModel.js`:
+
+- Each loop is a smooth closed curve through anatomical way points (back plate → over the trapezius → front
+  of the shoulder → anterior armpit fold → armpit → across the back). Their depth comes from the fitted torso,
+  then the curve is pushed onto the torso surface **and over the shoulder joint and the top of the upper arm**
+  (sphere + cylinder matching the arm occluders), smoothed like a strap under tension, and resampled.
+- The strap lies flat on the surface: its orientation follows the true surface normal (superellipse gradient,
+  the shoulder ball's normal where it wraps the joint), smoothed along the loop. It is wider and thicker over
+  the shoulders, with green-piped edges and a mesh texture.
+- A padded back plate with a buckle where the loops meet.
+- Arms pass in front, so the straps disappear into the armpits as they really do.
+
+**Synthetic end-to-end test:** front-facing person → tracking, straps over the front of both shoulders,
+disappearing behind the arms into the armpits; the same person facing away (sides swapped, face behind the
+shoulders) → "back" (yaw 180°), and the figure-of-8 crosses onto the back plate as on the box photo. Two
+issues found and fixed during this: the front straps first ran *inside* the shoulder (the reference torso has
+no shoulder ball), and they faced sideways (they were oriented from the torso axis instead of by the surface
+normal).
+
+---
+
 ## Testing performed
 
 All of this was done on the development machine (Windows 11, Chrome, built-in 1280×720 webcam).

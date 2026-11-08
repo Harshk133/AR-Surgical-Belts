@@ -32,6 +32,75 @@ export const BRACE_MODEL = {
 };
 
 export const PRODUCT = {
+  id: 'taylor',
+  kind: 'torso',
+  swatches: ['#6e7b86', '#47525e', '#2b3549', '#3a8580'],
+  tryOn: {
+    title: 'See the brace on you',
+    text: "Use your camera to preview the Taylor's Brace on your own torso. Turn to see the sides, and turn around for the back.",
+    tips: [
+      'Stand 1.5–2 m from the camera with your shoulders and waist in view.',
+      'Wear fitted, plain clothing in even, front-facing light.',
+      'Hold still for a second while the brace aligns.',
+    ],
+    stand: 'Line yourself up with the outline',
+  },
+  facingLabels: { front: 'Front view', side: 'Side view', back: 'Back view' },
+  views: [
+    { id: 'front', label: 'Front', text: 'Face the camera to see the shoulder straps and the front belt closure.' },
+    { id: 'side', label: 'Side', text: 'Turn slowly to your left or right to see the strap routing under the arm and the brace thickness.' },
+    { id: 'back', label: 'Back', text: 'Turn around to preview the rear panel and diagonal straps. Back-view tracking is estimated and less stable: turn slowly, and use the 3D viewer below for a precise look.' },
+  ],
+  fitLabels: {
+    width: ['Width shaped to your outline', 'Face the camera to fit the width'],
+    depth: ['Waist and tummy depth fitted', 'Turn sideways once to fit the depth'],
+  },
+  sliders: [
+    { key: 'y', label: 'Up / down', min: -0.15, max: 0.15, step: 0.005, unit: 'cm' },
+    { key: 'x', label: 'Left / right', min: -0.12, max: 0.12, step: 0.005, unit: 'cm', screen: true },
+    { key: 'scale', label: 'Size', min: 0.8, max: 1.25, step: 0.01, unit: '%' },
+    { key: 'rollDeg', label: 'Tilt', min: -20, max: 20, step: 1, unit: 'deg', screen: true },
+    { key: 'yawDeg', label: 'Turn', min: -30, max: 30, step: 1, unit: 'deg', screen: true },
+    { key: 'z', label: 'Depth', min: -0.06, max: 0.06, step: 0.005, unit: 'cm' },
+  ],
+  settingsLabels: { occlusion: 'Arms pass in front of the brace', fitShape: 'Shape the brace to my body' },
+  inspectorViews: [
+    ['front', 'Front'],
+    ['left', 'Left'],
+    ['back', 'Back'],
+    ['right', 'Right'],
+    ['threeQuarter', '¾'],
+  ],
+  captureName: 'taylors-brace-preview',
+  help: [
+    {
+      title: 'Getting a good alignment',
+      items: [
+        'Stand 1.5–2 m from the camera so your head, shoulders and waist are visible.',
+        'Face the camera with arms relaxed slightly away from your sides while it aligns.',
+        'Use even, front-facing light; avoid a bright window behind you.',
+        'Fitted, plain clothing tracks better than loose or patterned clothes.',
+        'If the brace sits a little off, use Adjust alignment in the side panel, or press Reset to re-align.',
+      ],
+    },
+    {
+      title: 'Seeing the sides and back',
+      items: [
+        "Turn slowly. The brace follows your torso's estimated rotation.",
+        'When your face is hidden, the app infers that you are facing away. This is an estimate and can lag or flicker; turning slowly helps.',
+        'For an exact look at the rear panel and straps, use the 3D viewer in the side panel.',
+      ],
+    },
+    {
+      title: "What this preview can and can't do",
+      items: [
+        'Position, size and depth are estimated from a single camera image; there is no true depth sensor.',
+        'Arms and the body hide parts of the brace using approximations, so small clipping or floating edges can occur.',
+        'It does not measure you, choose a size, or check clinical fit. A clinician or orthotist should fit the brace.',
+        'Video is processed in your browser and is never uploaded.',
+      ],
+    },
+  ],
   name: "Taylor's Brace",
   brand: 'MAXheal Orthotics',
   tagline: 'Thoraco-lumbar support brace',

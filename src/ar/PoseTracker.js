@@ -19,7 +19,7 @@ export class PoseTracker {
     this.onNotice = null;
   }
 
-  init({ variant = isLikelyMobile() ? 'lite' : 'full', segmentation = true } = {}) {
+  init({ variant = isLikelyMobile() ? 'lite' : 'full', segmentation = true, maskMaxW } = {}) {
     this.segmentation = segmentation;
     return new Promise((resolve, reject) => {
       let worker;
@@ -64,7 +64,7 @@ export class PoseTracker {
           this.onNotice?.(m.message);
         }
       };
-      worker.postMessage({ type: 'init', base: BASE, variant, segmentation });
+      worker.postMessage({ type: 'init', base: BASE, variant, segmentation, maskMaxW });
     });
   }
 

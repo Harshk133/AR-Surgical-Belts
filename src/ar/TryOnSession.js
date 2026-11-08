@@ -23,6 +23,7 @@ const loadEngine = () =>
 import { BRACE_MODEL, PRODUCT } from '../model/braceConfig.js';
 import { clamp } from './filters.js';
 
+export { store, sampleLuminance };
 export const DEFAULT_ADJUST = { x: 0, y: 0, z: 0, scale: 1, yawDeg: 0, rollDeg: 0, pitchDeg: 0 };
 const DEFAULT_OPTIONS = { silhouette: true, fitShape: true, armOcclusion: true, showStats: false, hfov: 63, mirror: null };
 const MAX_LEAD = 0.12; // s of motion prediction (capture -> display latency compensation)
@@ -48,10 +49,13 @@ const store = {
 };
 
 export class TryOnSession {
-  constructor() {
+  constructor({ storeKey = 'tryon', product = PRODUCT, defaultOptions = DEFAULT_OPTIONS } = {}) {
     this.listeners = new Set();
-    this.adjust = store.get('tryon.adjust', DEFAULT_ADJUST);
-    this.options = store.get('tryon.options', DEFAULT_OPTIONS);
+    this.storeKey = storeKey;
+    this.product = product;
+    this.defaultOptions = defaultOptions;
+    this.adjust = store.get(`${storeKey}.adjust`, DEFAULT_ADJUST);
+    this.options = store.get(`${storeKey}.options`, defaultOptions);
     this.snapshot = {
       phase: 'idle', // idle | starting | calibrating | tracking | manual | error
       error: null,
@@ -123,14 +127,13 @@ export class TryOnSession {
     this.set({ phase: 'starting', error: null, hint: null, calibration: 0 });
     try {
       this.set({ loading: { label: 'Loading try-on engine', progress: null } });
-      const { ArRenderer, webglAvailable, PoseTracker, TorsoTransform, BodyShapeFitter } = await loadEngine();
+      const E = await loadEngine();
+      const { webglAvailable, PoseTracker, TorsoTransform, BodyShapeFitter } = E;
       if (!webglAvailable()) throw new CameraError('webgl', 'WebGL is not available in this browser, so the 3D brace cannot be drawn.');
 
       // Renderer + model (lazy, once)
       if (!this.renderer) {
-        this.renderer = new ArRenderer(this.el.canvas, { maxDpr: isLikelyMobile() ? 1.5 : 2 });
-        this.set({ loading: { label: 'Loading 3D brace', progress: 0 } });
-        await this.renderer.loadBrace((p) => this.set({ loading: { label: 'Loading 3D brace', progress: p } }));
+        this.renderer = await this.createRenderer(E, { maxDpr: isLikelyMobile() ? 1.5 : 2 });
       }
       this.renderer.setFov(this.options.hfov);
 
@@ -255,15 +258,30 @@ export class TryOnSession {
       this.el.video.play?.().catch(() => {});
       this.last = performance.now();
       this.lastDetect = this.last;
-      this.torso?.reset(); // stale filters after a pause
+      this.resetTracking(); // stale filters after a pause
       this.raf = requestAnimationFrame(this.tick);
     }
   }
 
+  resetTracking() {
+    this.torso?.reset();
+  }
+
+  // ---- hooks for products that share the torso pipeline (see ImmobilizerTryOnSession) --------
+  async createRenderer(E, opts) {
+    const r = new E.ArRenderer(this.el.canvas, opts);
+    this.set({ loading: { label: 'Loading 3D brace', progress: 0 } });
+    await r.loadBrace((p) => this.set({ loading: { label: 'Loading 3D brace', progress: p } }));
+    return r;
+  }
+
+  /** Called once per new pose result, after the torso and body-shape updates. */
+  onPoseResult() {}
+
   // ---- alignment & options ----------------------------------------------------------------
   setAdjust(patch) {
     this.adjust = { ...this.adjust, ...patch };
-    store.set('tryon.adjust', this.adjust);
+    store.set(`${this.storeKey}.adjust`, this.adjust);
     this.set({ adjust: { ...this.adjust } });
   }
 
@@ -286,7 +304,7 @@ export class TryOnSession {
 
   async setOption(key, value) {
     this.options = { ...this.options, [key]: value };
-    store.set('tryon.options', this.options);
+    store.set(`${this.storeKey}.options`, this.options);
     this.set({ options: { ...this.options } });
     if (key === 'silhouette' || key === 'fitShape') this.tracker?.setSegmentation(this.needsMask());
     if (key === 'fitShape') {
@@ -399,6 +417,7 @@ export class TryOnSession {
           });
           this.fitter.setEnabled(this.fitter.status.width > 0);
         }
+        this.onPoseResult(pose, st, fw, fh, pdt);
         hint = this.computeHint(pose, st, snap.phase);
         if (snap.phase === 'calibrating') this.stepCalibration(st, pdt);
       }
@@ -428,7 +447,7 @@ export class TryOnSession {
         mirrored: this.snapshot.mirrored,
         frameW: fw,
         frameH: fh,
-        caption: `${PRODUCT.name} · virtual preview, not a fitting`,
+        caption: `${this.product.name} · virtual preview, not a fitting`,
       }).then(resolve, reject);
     }
 
