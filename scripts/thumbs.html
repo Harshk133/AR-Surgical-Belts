@@ -1,0 +1,106 @@
+<!doctype html>
+<!-- Renders each 3D product (no mannequin) to a transparent WebP. Driven by scripts/build-thumbs.mjs. -->
+<meta charset="utf-8" />
+<canvas id="c" width="480" height="480"></canvas>
+<script type="module">
+  import * as THREE from 'three';
+  import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+  import { createBrace } from '/src/ar/BraceModel.js';
+  import { WristBrace, canonicalRig } from '/src/ar/WristBrace.js';
+  import { ElbowStrap, canonicalArmRig } from '/src/ar/ElbowStrap.js';
+  import { ImmobilizerModel, canonicalImmobilizerRig } from '/src/ar/ImmobilizerModel.js';
+  import { SlingModel, canonicalSlingRig } from '/src/ar/SlingModel.js';
+  import { LumbarModel } from '/src/ar/LumbarModel.js';
+  import { ClavicleModel } from '/src/ar/ClavicleModel.js';
+
+  const procedural = (Model, rig) => () => {
+    const m = new Model({ mode: 'inspect' });
+    m.update(rig());
+    return m.root;
+  };
+  const PRODUCTS = {
+    taylor: {
+      az: 28,
+      build: async () => {
+        const { root, braceMeshes } = await createBrace({ mode: 'inspect' });
+        // keep only the brace: the dress form is not part of the product
+        const keep = new Set(braceMeshes);
+        root.traverse((o) => { if (o.isMesh && !keep.has(o)) o.visible = false; });
+        return root;
+      },
+    },
+    thumbWrist: { az: -30, build: procedural(WristBrace, canonicalRig) },
+    tennisElbow: {
+      az: 55,
+      build: () => {
+        const root = procedural(ElbowStrap, canonicalArmRig)();
+        root.rotation.x = Math.PI; // the rig has the elbow at the bottom: hang it the right way up
+        return root;
+      },
+    },
+    shoulderImmobilizer: { az: 22, build: procedural(ImmobilizerModel, canonicalImmobilizerRig) },
+    armSling: { az: 22, build: procedural(SlingModel, canonicalSlingRig) },
+    lumbarSacral: { az: 30, build: procedural(LumbarModel, () => ({ factors: null, girth: 1 })) },
+    clavicleBrace: { az: 150, build: procedural(ClavicleModel, () => ({ factors: null, girth: 1 })) },
+  };
+
+  const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, alpha: true, preserveDrawingBuffer: true });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setSize(480, 480, false);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  function visibleBox(root) {
+    const box = new THREE.Box3();
+    root.updateWorldMatrix(true, true);
+    root.traverse((o) => {
+      if (o.isMesh && o.visible && o.geometry) {
+        const b = new THREE.Box3().setFromBufferAttribute(o.geometry.attributes.position).applyMatrix4(o.matrixWorld);
+        box.union(b);
+      }
+    });
+    return box;
+  }
+
+  async function shoot(id, { az, build }) {
+    const scene = new THREE.Scene();
+    scene.environment = env;
+    scene.environmentIntensity = 0.45;
+    const key = new THREE.DirectionalLight(0xffffff, 1.7);
+    key.position.set(1, 2, 2.4);
+    const rim = new THREE.DirectionalLight(0xfff0dc, 0.9);
+    rim.position.set(-1.6, 1, -2);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x50555a, 0.75), key, rim);
+    const root = await build();
+    scene.add(root);
+
+    const box = visibleBox(root);
+    const c = box.getCenter(new THREE.Vector3());
+    const r = box.getBoundingSphere(new THREE.Sphere()).radius;
+    const camera = new THREE.PerspectiveCamera(22, 1, r * 0.1, r * 40);
+    const a = THREE.MathUtils.degToRad(az);
+    const e = THREE.MathUtils.degToRad(8);
+    const dist = r / Math.sin(THREE.MathUtils.degToRad(11)) * 0.98;
+    camera.position.set(c.x + Math.sin(a) * Math.cos(e) * dist, c.y + Math.sin(e) * dist, c.z + Math.cos(a) * Math.cos(e) * dist);
+    camera.lookAt(c);
+    renderer.render(scene, camera);
+
+    const blob = await new Promise((ok) => renderer.domElement.toBlob(ok, 'image/webp', 0.92));
+    const res = await fetch(`/__thumb/${id}`, { method: 'POST', body: blob });
+    if (!res.ok) throw new Error(`upload failed for ${id}`);
+  }
+
+  (async () => {
+    for (const [id, p] of Object.entries(PRODUCTS)) {
+      try {
+        await shoot(id, p);
+      } catch (err) {
+        await fetch(`/__thumb-error/${id}`, { method: 'POST', body: String(err?.stack || err) });
+      }
+    }
+    await fetch('/__thumb-done', { method: 'POST' });
+  })();
+</script>

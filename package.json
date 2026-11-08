@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "setup:assets": "node scripts/fetch-assets.mjs",
     "postinstall": "node scripts/fetch-assets.mjs --wasm-only",
-    "model:build": "node scripts/build-model.mjs"
+    "model:build": "node scripts/build-model.mjs",
+    "thumbs:build": "node scripts/build-thumbs.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.2.0",

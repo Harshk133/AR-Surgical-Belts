@@ -3,7 +3,7 @@
 // tracking pipeline, calibration and guidance are wrist-specific.
 import { CameraError } from './CameraController.js';
 import { isLikelyMobile } from './device.js';
-import { DEFAULT_ADJUST, TryOnSession, sampleLuminance } from './TryOnSession.js';
+import { DEFAULT_ADJUST, STALE_RUN, TryOnSession, sampleLuminance } from './TryOnSession.js';
 import { composeScreenshot } from './ScreenshotCapture.js';
 import { WRIST_PRODUCT } from '../model/wristBraceConfig.js';
 import { clamp } from './filters.js';
@@ -76,18 +76,20 @@ export class WristTryOnSession extends TryOnSession {
     this.hand?.reset();
   }
 
-  async start({ deviceId, testSource } = {}) {
-    if (this.snapshot.phase === 'starting') return;
+  async run({ deviceId, testSource } = {}, run) {
+    const gen = this.attachGen || 0;
     this.set({ phase: 'starting', error: null, hint: null, calibration: 0 });
     try {
       this.set({ loading: { label: 'Loading try-on engine', progress: null } });
       const E = (this.E = await this.loadEngine());
+      this.alive(run);
       if (!E.webglAvailable()) throw new CameraError('webgl', 'WebGL is not available in this browser, so the 3D brace cannot be drawn.');
 
       if (!this.renderer) {
         this.renderer = this.createRenderer(E, { maxDpr: isLikelyMobile() ? 1.5 : 2 });
         this.set({ loading: { label: 'Preparing the brace', progress: null } });
         await this.renderer.loadBrace();
+        this.alive(run);
       }
       this.renderer.setFov(this.options.hfov);
 
@@ -101,8 +103,10 @@ export class WristTryOnSession extends TryOnSession {
         this.el.video.hidden = false;
         this.el.image.hidden = true;
       }
+      this.alive(run);
       const mirrored = this.options.mirror ?? info.facing !== 'environment';
       const cameras = testSource ? [] : await this.camera.listDevices();
+      this.alive(run);
       this.set({ deviceId: info.deviceId, cameras, mirrored, sourceSize: { w: info.width, h: info.height } });
       this.layout();
 
@@ -115,6 +119,7 @@ export class WristTryOnSession extends TryOnSession {
         this.tracker = null;
         trackerOk = false;
       }
+      this.alive(run);
       this.hand.hfovDeg = this.options.hfov;
       this.hand.reset();
       this.fitter.reset();
@@ -135,7 +140,8 @@ export class WristTryOnSession extends TryOnSession {
       cancelAnimationFrame(this.raf);
       this.raf = requestAnimationFrame(this.tick);
     } catch (err) {
-      this.fail(err);
+      if (err === STALE_RUN) this.abandon(gen);
+      else if (run === this.runId) this.fail(err);
     }
   }
 
@@ -243,11 +249,12 @@ export class WristTryOnSession extends TryOnSession {
       }
     }
 
+    if (this.veiled) renderState = { ...renderState, visible: 0 };
     this.renderer.update(renderState, this.adjust, dt, {
       occlusion: this.options.armOcclusion && snap.phase !== 'manual',
       span: this.renderSpan(st),
     });
-    this.renderer.render();
+    this.draw(now);
 
     if (this.pendingCapture) {
       const { resolve, reject } = this.pendingCapture;

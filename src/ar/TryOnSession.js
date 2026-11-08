@@ -4,6 +4,7 @@
 import { CameraController, CameraError } from './CameraController.js';
 import { isLikelyMobile } from './device.js';
 import { composeScreenshot } from './ScreenshotCapture.js';
+import { WearReveal } from './WearReveal.js';
 
 // three.js + MediaPipe are pulled in only when the try-on starts.
 let engine;
@@ -24,6 +25,7 @@ import { BRACE_MODEL, PRODUCT } from '../model/braceConfig.js';
 import { clamp } from './filters.js';
 
 export { store, sampleLuminance };
+export const STALE_RUN = new Error('This start was superseded.');
 export const DEFAULT_ADJUST = { x: 0, y: 0, z: 0, scale: 1, yawDeg: 0, rollDeg: 0, pitchDeg: 0 };
 const DEFAULT_OPTIONS = { silhouette: true, fitShape: true, armOcclusion: true, showStats: false, hfov: 63, mirror: null };
 const MAX_LEAD = 0.12; // s of motion prediction (capture -> display latency compensation)
@@ -93,9 +95,9 @@ export class TryOnSession {
   }
 
   // ---- DOM wiring ---------------------------------------------------------------------------
-  attach({ container, stage, video, image, canvas }) {
+  attach({ container, stage, video, image, canvas, camera }) {
     this.el = { container, stage, video, image, canvas };
-    this.camera = new CameraController(video);
+    this.camera = camera || new CameraController(video);
     this.camera.onEnded = () => {
       if (this.running) this.fail(new CameraError('ended', 'The camera stopped unexpectedly.'));
     };
@@ -104,12 +106,18 @@ export class TryOnSession {
     document.addEventListener('visibilitychange', this.onVisibility);
   }
 
-  detach() {
-    this.stop();
+  detach({ keepCamera = false } = {}) {
+    this.stop({ keepCamera });
     this.ro?.disconnect();
     document.removeEventListener('visibilitychange', this.onVisibility);
+    this.attachGen = (this.attachGen || 0) + 1;
+    this.releaseEngine();
+  }
+
+  releaseEngine() {
     this.renderer?.dispose();
     this.renderer = null;
+    this.wear = null;
     this.tracker?.close();
     this.tracker = null;
   }
@@ -118,22 +126,78 @@ export class TryOnSession {
     return ['starting', 'calibrating', 'tracking', 'manual'].includes(this.snapshot.phase);
   }
 
+  // ---- wearing: the product waits, hidden, until the UI brings it to the body ---------------------
+  veil() {
+    this.veiled = true;
+    this.wear?.set(0);
+  }
+
+  wearOn(ms = 640) {
+    this.veiled = false;
+    if (this.renderer) this.renderer.opacity = 1;
+    return this.wear ? this.wear.play(1, ms) : Promise.resolve();
+  }
+
+  wearOff(ms = 300) {
+    return this.wear ? this.wear.play(0, ms) : Promise.resolve();
+  }
+
+  /** The product's current box on screen (viewport px), or null before its first tracked frame. */
+  landing() {
+    return this.wear && this.el ? this.wear.screenBounds(this.el.canvas.getBoundingClientRect(), this.snapshot.mirrored) : null;
+  }
+
+  /** Metres at the product's depth per CSS pixel of the stage (for direct manipulation). */
+  metersPerPixel() {
+    const r = this.renderer;
+    if (!r) return 0;
+    const z = Math.abs(r.anchor.matrixWorld.elements[14]) || 1;
+    return z / (r.size.w / 2 / Math.tan((this.options.hfov * Math.PI) / 360));
+  }
+
+  draw(now) {
+    const r = this.renderer;
+    if (this.wear?.r !== r) this.wear = new WearReveal(r, this.veiled ? 0 : 1);
+    this.wear.before(now, this.veiled);
+    r.render();
+    this.wear.after();
+  }
+
   // ---- lifecycle ---------------------------------------------------------------------------
   /**
    * Starts the experience. testSource (dev/QA): URL of an image or video to use instead of the camera.
+   * Starts are serialized and the newest one wins, so tapping through products never leaves two
+   * pipelines fighting over one canvas.
    */
-  async start({ deviceId, testSource } = {}) {
-    if (this.snapshot.phase === 'starting') return;
+  start(opts = {}) {
+    const run = (this.runId = (this.runId || 0) + 1);
+    this.startChain = (this.startChain || Promise.resolve()).then(() => (run === this.runId ? this.run(opts, run) : undefined));
+    return this.startChain;
+  }
+
+  alive(run) {
+    if (run !== this.runId) throw STALE_RUN;
+  }
+
+  /** A superseded start exits here; anything it built after a detach has no owner and is released. */
+  abandon(gen) {
+    if (gen !== (this.attachGen || 0)) this.releaseEngine();
+  }
+
+  async run({ deviceId, testSource } = {}, run) {
+    const gen = this.attachGen || 0;
     this.set({ phase: 'starting', error: null, hint: null, calibration: 0 });
     try {
       this.set({ loading: { label: 'Loading try-on engine', progress: null } });
       const E = await loadEngine();
+      this.alive(run);
       const { webglAvailable, PoseTracker, TorsoTransform, BodyShapeFitter } = E;
       if (!webglAvailable()) throw new CameraError('webgl', 'WebGL is not available in this browser, so the 3D brace cannot be drawn.');
 
       // Renderer + model (lazy, once)
       if (!this.renderer) {
         this.renderer = await this.createRenderer(E, { maxDpr: isLikelyMobile() ? 1.5 : 2 });
+        this.alive(run);
       }
       this.renderer.setFov(this.options.hfov);
 
@@ -148,8 +212,10 @@ export class TryOnSession {
         this.el.video.hidden = false;
         this.el.image.hidden = true;
       }
+      this.alive(run);
       const mirrored = this.options.mirror ?? info.facing !== 'environment';
       const cameras = testSource ? [] : await this.camera.listDevices();
+      this.alive(run);
       this.set({ deviceId: info.deviceId, cameras, mirrored, sourceSize: { w: info.width, h: info.height } });
       this.layout();
 
@@ -164,6 +230,7 @@ export class TryOnSession {
           this.tracker = null;
           trackerOk = false;
         }
+        this.alive(run);
       }
       this.torso = this.torso || new TorsoTransform(BRACE_MODEL);
       this.torso.hfovDeg = this.options.hfov;
@@ -186,7 +253,8 @@ export class TryOnSession {
       cancelAnimationFrame(this.raf);
       this.raf = requestAnimationFrame(this.tick);
     } catch (err) {
-      this.fail(err);
+      if (err === STALE_RUN) this.abandon(gen);
+      else if (run === this.runId) this.fail(err);
     }
   }
 
@@ -214,10 +282,11 @@ export class TryOnSession {
     return { deviceId: 'test', facing: 'environment', width: img.naturalWidth, height: img.naturalHeight };
   }
 
-  stop() {
+  stop({ keepCamera = false } = {}) {
+    this.runId = (this.runId || 0) + 1; // any start still in flight is now stale
     cancelAnimationFrame(this.raf);
     this.raf = 0;
-    this.camera?.stop();
+    if (!keepCamera) this.camera?.stop();
     if (this.el) {
       this.el.image.hidden = true;
       this.el.image.removeAttribute('src');
@@ -434,8 +503,9 @@ export class TryOnSession {
       }
     }
 
+    if (this.veiled) renderState = { ...renderState, visible: 0 };
     this.renderer.update(renderState, this.adjust, dt, { occlusion: this.options.armOcclusion && snap.phase !== 'manual' });
-    this.renderer.render();
+    this.draw(now);
 
     if (this.pendingCapture) {
       const { resolve, reject } = this.pendingCapture;

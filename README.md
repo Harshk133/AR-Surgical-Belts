@@ -37,6 +37,27 @@ This needs Blender 4.2+ (built and tested with **Blender 5.2.3**). The script fi
 capture) on an image or video file (`.mp4/.webm`) instead of the camera. The pose detector needs a
 visible head and shoulders, so a person filmed from 1.5–2 m works best.
 
+`?product=<id>` puts a product on as soon as the page opens, which also works as a deep link from a
+product page.
+
+## The interface
+
+One full-screen mirror and one row of circular boxes. There is no start button, panel or guide.
+
+- **Tap a box**: the camera starts, the box lifts and opens, the belt flies to where the tracked 3D model
+  is, and the real model closes around the body from both sides and cinches in.
+- **Tap it again**: the belt returns to its box. **Tap another**: it swaps.
+- **Drag** the belt to move it and **pinch** to resize it. These replace the alignment sliders (on the
+  wrist and elbow products only pinch applies, because their axes follow the limb).
+- Tap the product name for its details. The picture and switch-camera buttons appear once a belt is on.
+
+Where it lives: `src/components/choreography.js` (box and flight, Web Animations API),
+`src/ar/WearReveal.js` (the 3D closing effect, shared by every renderer), `src/App.jsx` (the sequence).
+The camera is shared across products, so switching belts never restarts it.
+
+Box contents are transparent renders of the 3D models in `public/products/`. After changing a model,
+rebuild them with `npm run thumbs:build` (needs Chrome or Edge, or set `CHROME_PATH`).
+
 ---
 
 ## What's in the repo
@@ -446,7 +467,7 @@ All of this was done on the development machine (Windows 11, Chrome, built-in 12
 | Screenshot includes the 3D overlay | ✅ PNG at source resolution, overlay pixels verified against the raw frame |
 | Permission denied | ✅ Recovery card (simulated `NotAllowedError`) |
 | Tracker failure | ✅ Falls back to manual placement mode with a banner |
-| Mobile layout (390 px) | ✅ Full-height viewport, bottom toolbar, panel below (layout check only, no phone hardware test) |
+| Mobile layout (390 px) | ✅ Full-screen mirror with the box shelf at the bottom (headless phone emulation only, no phone hardware test) |
 | Production build | ✅ The bundled module worker and local WASM initialise |
 
 **Measured performance (this machine):**

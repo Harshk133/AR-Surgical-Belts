@@ -50,7 +50,26 @@ export class CameraController {
     }
   }
 
-  async start({ deviceId, facingMode = 'user' } = {}) {
+  /** Starts the camera, or hands back the running stream: products share it while the user switches. */
+  start(opts = {}) {
+    if (this.active && (!opts.deviceId || opts.deviceId === this.deviceId)) {
+      this.video.play().catch(() => {});
+      return Promise.resolve(this.info());
+    }
+    // one permission prompt, however many products are tapped while it is open
+    if (this.pending && !opts.deviceId) return this.pending;
+    const p = this.open(opts).finally(() => {
+      if (this.pending === p) this.pending = null;
+    });
+    this.pending = p;
+    return p;
+  }
+
+  info() {
+    return { deviceId: this.deviceId, facing: this.facing, width: this.video.videoWidth, height: this.video.videoHeight };
+  }
+
+  async open({ deviceId, facingMode = 'user' } = {}) {
     const unsupported = CameraController.checkSupport();
     if (unsupported) throw unsupported;
     this.stop();
@@ -87,7 +106,7 @@ export class CameraController {
     if (this.video.readyState < 2) {
       await new Promise((resolve) => this.video.addEventListener('loadeddata', resolve, { once: true }));
     }
-    return { deviceId: this.deviceId, facing: this.facing, width: this.video.videoWidth, height: this.video.videoHeight };
+    return this.info();
   }
 
   stop() {

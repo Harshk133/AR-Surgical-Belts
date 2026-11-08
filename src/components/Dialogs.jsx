@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { IconClose, IconDownload } from './icons.jsx';
+import { useEffect, useRef, useState } from 'react';
+import { IconClose } from './icons.jsx';
 
-function Dialog({ open, onClose, title, children, footer }) {
+function Sheet({ open, onClose, label, children }) {
   const ref = useRef(null);
   useEffect(() => {
     const d = ref.current;
@@ -9,54 +9,77 @@ function Dialog({ open, onClose, title, children, footer }) {
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} onClose={onClose} onCancel={onClose} aria-labelledby={`${title}-h`}>
-      <div className="dlg-head">
-        <h2 id={`${title}-h`}>{title}</h2>
-        <button className="btn ghost small" onClick={onClose} aria-label="Close"><IconClose /></button>
-      </div>
-      <div className="dlg-body">{children}</div>
-      {footer && <div className="dlg-foot">{footer}</div>}
+    <dialog
+      className="sheet"
+      ref={ref}
+      aria-label={label}
+      onClose={onClose}
+      onClick={(e) => e.target === ref.current && onClose()} // a tap on the backdrop
+    >
+      <button className="sheet-close" onClick={onClose} aria-label="Close"><IconClose /></button>
+      {children}
     </dialog>
   );
 }
 
-export function CaptureDialog({ shot, error, onClose, product }) {
-  const open = !!(shot || error);
-  const name = `${product.captureName}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+export function DetailsSheet({ open, product, onClose }) {
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={error ? 'Capture failed' : 'Your preview'}
-      footer={
+    <Sheet open={open} onClose={onClose} label="Product details">
+      {product && (
         <>
-          <button className="btn" onClick={onClose}>Close</button>
-          {shot && (
-            <a className="btn primary" href={shot.url} download={name}>
-              <IconDownload /> Download PNG
-            </a>
-          )}
+          <p className="sheet-kicker">{product.brand}</p>
+          <h2>{product.name}</h2>
+          <p className="sheet-tag">{product.tagline}</p>
+          <p>{product.description}</p>
+          <ul className="sheet-list">{product.features.map((f) => <li key={f}>{f}</li>)}</ul>
+          <p className="sheet-fine">{product.disclaimer}</p>
         </>
-      }
-    >
-      {error ? (
-        <p>{error}. Make sure the try-on is running and the brace is visible, then try again.</p>
-      ) : (
-        shot && <img className="shot" src={shot.url} alt="Captured try-on preview" />
       )}
-    </Dialog>
+    </Sheet>
   );
 }
 
-export function HelpDialog({ open, onClose, product }) {
+export function CaptureSheet({ shot, error, product, onClose }) {
+  const [canShare, setCanShare] = useState(false);
+  const file = shot && product ? new File([shot.blob], `${product.captureName}.png`, { type: 'image/png' }) : null;
+  useEffect(() => {
+    setCanShare(!!file && !!navigator.canShare?.({ files: [file] }));
+  }, [shot]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Dialog open={open} onClose={onClose} title="Positioning guide">
-      {product.help.map((sec) => (
-        <div key={sec.title}>
-          <h4>{sec.title}</h4>
-          <ul>{sec.items.map((t) => <li key={t}>{t}</li>)}</ul>
+    <Sheet open={!!(shot || error)} onClose={onClose} label="Your picture">
+      {error && <p>{error}</p>}
+      {shot && <img className="shot" src={shot.url} alt={`You wearing the ${product?.name}`} />}
+      {shot && (
+        <div className="sheet-actions">
+          {canShare && (
+            <button className="pill-btn ghost" onClick={() => navigator.share({ files: [file] }).catch(() => {})}>Share</button>
+          )}
+          <a className="pill-btn" href={shot.url} download={`${product?.captureName}.png`}>Save</a>
         </div>
-      ))}
-    </Dialog>
+      )}
+    </Sheet>
+  );
+}
+
+const ERRORS = {
+  denied: ['Camera is blocked', 'Allow the camera for this site in your browser settings, then try again.'],
+  notfound: ['No camera found', 'Use a phone or laptop with a camera.'],
+  busy: ['Camera is busy', 'Close other apps using the camera, then try again.'],
+  insecure: ['A secure link is needed', 'Open this page over https.'],
+  unsupported: ['Camera not supported', 'Open this page in a recent version of Chrome or Safari.'],
+  webgl: ['3D is unavailable', 'Turn on hardware acceleration, or try another browser.'],
+  ended: ['The camera stopped', 'Try again to restart it.'],
+};
+
+export function ErrorSheet({ error, onRetry, onClose }) {
+  const [title, text] = ERRORS[error?.kind] || ['Something went wrong', 'Please try again.'];
+  return (
+    <Sheet open={!!error} onClose={onClose} label={title}>
+      <h2>{title}</h2>
+      <p>{text}</p>
+      <div className="sheet-actions">
+        <button className="pill-btn" onClick={onRetry}>Try again</button>
+      </div>
+    </Sheet>
   );
 }

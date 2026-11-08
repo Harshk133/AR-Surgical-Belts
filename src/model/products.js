@@ -10,3 +10,16 @@ import { CLAVICLE_PRODUCT } from './clavicleConfig.js';
 
 export const PRODUCTS = [TAYLOR, WRIST_PRODUCT, ELBOW_PRODUCT, IMMOBILIZER_PRODUCT, ARM_SLING_PRODUCT, LUMBAR_PRODUCT, CLAVICLE_PRODUCT];
 export const productById = (id) => PRODUCTS.find((p) => p.id === id) || PRODUCTS[0];
+
+// What the shelf shows: a short label, and the render from `npm run thumbs:build`.
+const SHORT = {
+  taylor: 'Taylor',
+  thumbWrist: 'Wrist',
+  tennisElbow: 'Elbow',
+  shoulderImmobilizer: 'Shoulder',
+  armSling: 'Sling',
+  lumbarSacral: 'Lumbar',
+  clavicleBrace: 'Clavicle',
+};
+export const shortName = (p) => SHORT[p.id] || p.name;
+export const thumbOf = (p) => `/products/${p.id}.webp`;
